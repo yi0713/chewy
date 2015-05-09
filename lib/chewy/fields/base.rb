@@ -10,6 +10,14 @@ module Chewy
         @children = []
       end
 
+      def self_and_ancestors
+        @self_and_ancestors ||= parent ? parent.self_and_ancestors + [self] : [self]
+      end
+
+      def path
+        self_and_ancestors.map(&:name)
+      end
+
       def multi_field?
         children.any? && !object_field?
       end
@@ -27,10 +35,16 @@ module Chewy
         {name => mapping}
       end
 
-      def compose(object, *parent_objects)
-        result = if value && value.is_a?(Proc)
-          value.arity.zero? ? object.instance_exec(&value) :
-            value.call(object, *parent_objects.first(value.arity - 1))
+      def compose(object, parent_objects = [], stash = nil)
+        result = if value
+          if value.is_a?(Proc)
+            value.arity.zero? ? object.instance_exec(&value) :
+              value.call(object, *parent_objects.first(value.arity - 1))
+          elsif value.is_a?(Chewy::Type::Chains::Column)
+            value.evaluate stash.fetch(path, object)
+          else
+            object.send(value)
+          end
         elsif object.is_a?(Hash)
           object[name] || object[name.to_s]
         else
@@ -38,9 +52,9 @@ module Chewy
         end
 
         result = if result.respond_to?(:to_ary)
-          result.to_ary.map { |result| compose_children(result, object, *parent_objects) }
+          result.to_ary.map { |result| compose_children(result, [object] + parent_objects) }
         else
-          compose_children(result, object, *parent_objects)
+          compose_children(result, [object] + parent_objects)
         end if children.any? && !multi_field?
 
         {name => result.as_json(root: false)}
@@ -48,8 +62,8 @@ module Chewy
 
     private
 
-      def compose_children(value, *parent_objects)
-        children.map { |field| field.compose(value, *parent_objects) if value }.compact.inject(:merge)
+      def compose_children(value, parent_objects)
+        children.map { |field| field.compose(value, parent_objects) if value }.compact.inject(:merge)
       end
     end
   end

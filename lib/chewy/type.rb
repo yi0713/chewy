@@ -1,4 +1,5 @@
 require 'chewy/search'
+require 'chewy/type/chains'
 require 'chewy/type/mapping'
 require 'chewy/type/wrapper'
 require 'chewy/type/observe'
@@ -11,6 +12,7 @@ require 'chewy/type/adapter/mongoid'
 module Chewy
   class Type
     include Search
+    include Chains
     include Mapping
     include Wrapper
     include Observe
@@ -44,13 +46,19 @@ module Chewy
       public_methods - Chewy::Type.public_methods
     end
 
-    def self.method_missing(method, *args, &block)
+    def self.method_missing method, *args, &block
       if index.scopes.include?(method)
         define_singleton_method method do |*args, &block|
           all.scoping { index.public_send(method, *args, &block) }
         end
         send(method, *args, &block)
+      else
+        super
       end
+    end
+
+    def self.respond_to_missing? method, *_
+      index.scopes.include?(method) || super
     end
 
     def self.const_missing(name)

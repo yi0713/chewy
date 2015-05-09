@@ -17,6 +17,10 @@ module Chewy
         @options.delete(:type)
       end
 
+      def self_and_ancestors
+        @self_and_ancestors ||= [self]
+      end
+
       def mappings_hash
         mappings = super
         mappings[name].delete(:type)

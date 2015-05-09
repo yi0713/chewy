@@ -4,6 +4,40 @@ module Chewy
   class Type
     module Adapter
       class ActiveRecord < Orm
+
+        def chain_target klass, path
+          path.inject(klass) do |parent_class, segment|
+            break unless parent_class
+            parent_class.reflect_on_association(segment).try(:klass) ||
+              (parent_class.send(segment).klass if parent_class.respond_to?(segment) &&
+                parent_class.send(segment).is_a?(::ActiveRecord::Relation))
+          end
+        end
+
+        def columns_exists? klass, columns
+          columns.all? { |column| klass.columns_hash[column.to_s] }
+        end
+
+        def columns_data klass, path, columns, ids
+          path.slice_before(class: klass) do |segment, memo|
+            reflection = memo[:class].reflect_on_association(segment)
+            memo[:class] = reflection.klass if reflection
+          end.with_object(class: klass, result: Hash[ids.zip([])]) do |segments, memo|
+            reflection = memo[:class].reflect_on_association(segments.first)
+            p segments
+            p memo[:class]
+            p reflection.macro
+            p memo[:class].new.association(segments.first).association_scope.to_sql
+            scope = case reflection.macro
+            when :belongs_to
+            when :has_one
+            else
+            end
+
+            memo[:class] = reflection.klass
+          end[:result]
+        end
+
       private
 
         def cleanup_default_scope!

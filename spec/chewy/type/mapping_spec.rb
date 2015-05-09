@@ -33,6 +33,10 @@ describe Chewy::Type::Mapping do
     specify { expect(product.root_object.children[3].children.map(&:parent)).to eq([product.root_object.children[3]]) }
   end
 
+  describe '._fields' do
+    specify { expect(product._fields.map(&:name)).to eq([:name, :surname, :subfield1, :title, :subfield2, :price, :product]) }
+  end
+
   describe '.mappings_hash' do
     specify { expect(Class.new(Chewy::Type).mappings_hash).to eq({}) }
     specify { expect(product.mappings_hash).to eq(product.root_object.mappings_hash) }

@@ -5,7 +5,8 @@ module Chewy
 
       included do
         class_attribute :root_object, instance_reader: false, instance_writer: false
-        class_attribute :_templates
+        class_attribute :_fields, instance_reader: false, instance_writer: false
+        self._fields = []
       end
 
       module ClassMethods
@@ -153,17 +154,19 @@ module Chewy
 
       private
 
-        def expand_nested field, &block
+        def expand_nested field
           if @_current_field
             field.parent = @_current_field
             @_current_field.children.push(field)
           end
 
-          if block
+          if block_given?
             previous_field, @_current_field = @_current_field, field
-            block.call
+            yield #chain(field.path[1..-1])
             @_current_field = previous_field
           end
+
+          self._fields = _fields + [field]
         end
 
         def build_root options = {}, &block

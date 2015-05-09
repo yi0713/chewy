@@ -51,6 +51,18 @@ module Chewy
           raise NotImplementedError
         end
 
+        def chain_target klass, path
+          nil
+        end
+
+        def columns_exists? klass, columns
+          false
+        end
+
+        def columns_data objects, klass, path, columns
+          {}
+        end
+
       private
 
         def grouped_objects(objects)

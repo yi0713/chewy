@@ -2,6 +2,7 @@ require 'spec_helper'
 
 describe Chewy::Type::Adapter::ActiveRecord, :active_record do
   before { stub_model(:city) }
+  subject { described_class.new(City) }
 
   describe '#name' do
     specify { expect(described_class.new(City).name).to eq('City') }
@@ -39,7 +40,6 @@ describe Chewy::Type::Adapter::ActiveRecord, :active_record do
 
   describe '#identify' do
     context do
-      subject { described_class.new(City) }
       let!(:cities) { 3.times.map { City.create! } }
 
       specify { expect(subject.identify(City.where(nil))).to match_array(cities.map(&:id)) }
@@ -50,7 +50,6 @@ describe Chewy::Type::Adapter::ActiveRecord, :active_record do
 
     context 'custom primary_key' do
       before { stub_model(:city) { self.primary_key = 'rating' } }
-      subject { described_class.new(City) }
       let!(:cities) { 3.times.map { |i| City.create! { |c| c.rating = i } } }
 
       specify { expect(subject.identify(City.where(nil))).to match_array([0, 1, 2]) }
@@ -70,7 +69,6 @@ describe Chewy::Type::Adapter::ActiveRecord, :active_record do
     context do
       let!(:cities) { 3.times.map { City.create! } }
       let!(:deleted) { 4.times.map { City.create!.tap(&:destroy) } }
-      subject { described_class.new(City) }
 
       specify { expect(import).to eq([{index: cities}]) }
       specify { expect(import nil).to eq([]) }
@@ -109,7 +107,6 @@ describe Chewy::Type::Adapter::ActiveRecord, :active_record do
     context 'additional delete conitions' do
       let!(:cities) { 4.times.map { |i| City.create! rating: i } }
       before { cities.last(2).map(&:destroy) }
-      subject { described_class.new(City) }
 
       context do
         before do
@@ -161,7 +158,6 @@ describe Chewy::Type::Adapter::ActiveRecord, :active_record do
       before { stub_model(:city) { self.primary_key = 'rating' } }
       let!(:cities) { 3.times.map { |i| City.create! { |c| c.rating = i + 7 } } }
       let!(:deleted) { 3.times.map { |i| City.create! { |c| c.rating = i + 10 }.tap(&:destroy) } }
-      subject { described_class.new(City) }
 
       specify { expect(import).to eq([{index: cities}]) }
 
@@ -238,7 +234,6 @@ describe Chewy::Type::Adapter::ActiveRecord, :active_record do
       let!(:cities) { 3.times.map { |i| City.create! } }
       let!(:deleted) { 2.times.map { |i| City.create!.tap(&:destroy) } }
       let(:ids) { (cities + deleted).map(&:id) }
-      subject { described_class.new(City) }
 
       let(:data_comparer) do
         ->(id, data) { objects = data[:index] || data[:delete]; !objects.map { |o| o.respond_to?(:id) ? o.id : o }.include?(id) }
@@ -295,8 +290,6 @@ describe Chewy::Type::Adapter::ActiveRecord, :active_record do
 
       let(:type) { double(type_name: 'user') }
 
-      subject { described_class.new(City) }
-
       specify { expect(subject.load(cities.map { |c| double(id: c.id) }, _type: type)).to eq(cities) }
       specify { expect(subject.load(cities.map { |c| double(id: c.id) }.reverse, _type: type)).to eq(cities.reverse) }
       specify { expect(subject.load(deleted.map { |c| double(id: c.id) }, _type: type)).to eq([nil, nil]) }
@@ -320,8 +313,6 @@ describe Chewy::Type::Adapter::ActiveRecord, :active_record do
 
       let(:type) { double(type_name: 'user') }
 
-      subject { described_class.new(City) }
-
       specify { expect(subject.load(cities.map { |c| double(id: c.id) }, _type: type)).to eq(cities) }
       specify { expect(subject.load(cities.map { |c| double(id: c.id) }.reverse, _type: type)).to eq(cities.reverse) }
       specify { expect(subject.load(deleted.map { |c| double(id: c.id) }, _type: type)).to eq([nil, nil]) }
@@ -337,5 +328,37 @@ describe Chewy::Type::Adapter::ActiveRecord, :active_record do
         _type: type, scope: City.where(country_id: 1), user: {scope: ->{ where(country_id: 0)}}))
         .to eq(cities.first(2) + [nil]) }
     end
+  end
+
+  describe '#chain_target' do
+    before do
+      stub_model(:country)
+
+      City.belongs_to :country
+      Country.has_many :cities
+    end
+  end
+
+  describe '#columns_exists?' do
+    specify { expect(subject.columns_exists?(City, [:name])).to eq(true) }
+    specify { expect(subject.columns_exists?(City, [:borogoves])).to eq(false) }
+    specify { expect(subject.columns_exists?(City, [:name, :borogoves])).to eq(false) }
+    specify { expect(subject.columns_exists?(City, [:name, :raiting])).to eq(false) }
+  end
+
+  describe '#columns_data' do
+    before do
+      stub_model(:country)
+
+      City.belongs_to :country, -> {where(rating: nil)}
+      Country.has_many :cities, -> {where(rating: nil)}
+    end
+
+    let!(:countries) { 2.times.map { Country.create! } }
+    let!(:cities) { 4.times.map { |i| City.create! country: countries[i/2] } }
+
+    specify { expect(subject.columns_data(City, [:country], [:name], cities.map(&:id))).to eq([]) }
+    specify { expect(subject.columns_data(Country, [:cities], [:name], countries.map(&:id))).to eq([]) }
+    specify { expect(subject.columns_data(Country, [:cities, :cool, :country, :great, :cities], [:name], countries.map(&:id))).to eq([]) }
   end
 end

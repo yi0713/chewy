@@ -4,6 +4,56 @@ describe Chewy::Fields::Base do
   specify { expect(described_class.new('name').name).to eq(:name) }
   specify { expect(described_class.new('name', type: 'integer').options[:type]).to eq('integer') }
 
+  describe '#self_and_ancestors, #path' do
+    let(:field) { described_class.new(:name, type: :object) }
+    let(:fields1) { 2.times.map { |i| described_class.new("name#{i+1}", type: "string#{i+1}") } }
+    let(:fields2) { 2.times.map { |i| described_class.new("name#{i+3}", type: "string#{i+3}") } }
+    before do
+      fields1.each { |m| field.children.push(m); m.parent = field }
+      fields2.each { |m| fields1[0].children.push(m); m.parent = fields1[0] }
+    end
+
+    specify { expect(field.self_and_ancestors).to eq([field]) }
+    specify { expect(field.path).to eq([:name]) }
+
+    specify { expect(fields1[0].self_and_ancestors).to eq([field, fields1[0]]) }
+    specify { expect(fields1[0].path).to eq([:name, :name1]) }
+    specify { expect(fields1[1].self_and_ancestors).to eq([field, fields1[1]]) }
+    specify { expect(fields1[1].path).to eq([:name, :name2]) }
+
+    specify { expect(fields2[0].self_and_ancestors).to eq([field, fields1[0], fields2[0]]) }
+    specify { expect(fields2[0].path).to eq([:name, :name1, :name3]) }
+    specify { expect(fields2[1].self_and_ancestors).to eq([field, fields1[0], fields2[1]]) }
+    specify { expect(fields2[1].path).to eq([:name, :name1, :name4]) }
+  end
+
+  describe '#mappings_hash' do
+    let(:field) { described_class.new(:name, type: :object) }
+    let(:fields1) { 2.times.map { |i| described_class.new("name#{i+1}", type: "string#{i+1}") } }
+    let(:fields2) { 2.times.map { |i| described_class.new("name#{i+3}", type: "string#{i+3}") } }
+    before do
+      fields1.each { |m| field.children.push(m) }
+      fields2.each { |m| fields1[0].children.push(m) }
+    end
+
+    specify { expect(field.mappings_hash).to eq({name: {type: :object, properties: {
+      name1: {type: 'string1', fields: {
+        name3: {type: 'string3'}, name4: {type: 'string4'}
+      }}, name2: {type: 'string2'}
+    }}}) }
+
+    context do
+      let(:field) { described_class.new(:name, type: :string) }
+      let(:fields1) { 2.times.map { |i| described_class.new("name#{i+1}") } }
+
+      specify { expect(field.mappings_hash).to eq({name: {type: :string, fields: {
+        name1: {type: 'object', properties: {
+          name3: {type: 'string3'}, name4: {type: 'string4'}
+        }}, name2: {type: 'string'}
+      }}}) }
+    end
+  end
+
   describe '#compose' do
     let(:field) { described_class.new(:name, value: ->(o){ o.value }) }
 
@@ -11,6 +61,13 @@ describe Chewy::Fields::Base do
     specify { expect(field.compose(double(value: ['hello', 'world']))).to eq({name: ['hello', 'world']}) }
 
     specify { expect(described_class.new(:name).compose(double(name: 'hello'))).to eq({name: 'hello'}) }
+
+    context 'method name values' do
+      let(:field) { described_class.new(:name, value: :full_name) }
+
+      specify { expect(field.compose(double(full_name: 'hello'))).to eq({name: 'hello'}) }
+      specify { expect(field.compose(double(full_name: ['hello', 'world']))).to eq({name: ['hello', 'world']}) }
+    end
 
     context 'nested fields' do
       before do
@@ -70,33 +127,6 @@ describe Chewy::Fields::Base do
       end
 
       specify{ expect(field.compose(object)).to eq({ name: { 'key1' => 'value1', 'key2' => 'value2' } }) }
-    end
-  end
-
-  describe '#mappings_hash' do
-    let(:field) { described_class.new(:name, type: :object) }
-    let(:fields1) { 2.times.map { |i| described_class.new("name#{i+1}", type: "string#{i+1}") } }
-    let(:fields2) { 2.times.map { |i| described_class.new("name#{i+3}", type: "string#{i+3}") } }
-    before do
-      fields1.each { |m| field.children.push(m) }
-      fields2.each { |m| fields1[0].children.push(m) }
-    end
-
-    specify { expect(field.mappings_hash).to eq({name: {type: :object, properties: {
-      name1: {type: 'string1', fields: {
-        name3: {type: 'string3'}, name4: {type: 'string4'}
-      }}, name2: {type: 'string2'}
-    }}}) }
-
-    context do
-      let(:field) { described_class.new(:name, type: :string) }
-      let(:fields1) { 2.times.map { |i| described_class.new("name#{i+1}") } }
-
-      specify { expect(field.mappings_hash).to eq({name: {type: :string, fields: {
-        name1: {type: 'object', properties: {
-          name3: {type: 'string3'}, name4: {type: 'string4'}
-        }}, name2: {type: 'string'}
-      }}}) }
     end
   end
 
